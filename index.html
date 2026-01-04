@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>M5 P2P Sync Reader</title>
+<title>M5 Instant Streamer</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -11,10 +11,8 @@
 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
 <style>
-    /* === デザイン (サイバーパンク/ダークモード) === */
     :root {
         --bg-main: #050008;
-        --panel-bg: #100510;
         --neon-pink: #ff0055;
         --neon-blue: #00d2ff;
         --neon-green: #00ff99;
@@ -23,13 +21,11 @@
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     body { background: var(--bg-main); color: var(--text-main); margin: 0; font-family: sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
 
-    /* 共通レイアウト */
     .screen { position: absolute; top:0; left:0; width:100%; height:100%; display:none; flex-direction: column; align-items: center; justify-content: center; background: var(--bg-main); }
     .active { display: flex; }
 
     h1 { color: var(--neon-blue); text-shadow: 0 0 10px var(--neon-blue); margin-bottom: 20px; font-size: 24px; }
     
-    /* ボタン類 */
     .btn {
         background: transparent; border: 2px solid var(--neon-pink); color: var(--neon-pink);
         padding: 15px 30px; font-size: 18px; font-weight: bold; border-radius: 50px;
@@ -40,75 +36,77 @@
     .btn-blue { border-color: var(--neon-blue); color: var(--neon-blue); box-shadow: 0 0 10px rgba(0,210,255,0.2); }
     .btn-blue:active { background: var(--neon-blue); color: #000; }
 
-    /* RECEIVER (Tablet) 用スタイル */
-    #pdf-canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+    /* モニター用画像 */
+    #monitor-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    
     #qrcode { margin: 20px; padding: 10px; background: #fff; border-radius: 8px; }
     .status-log { font-family: monospace; color: #888; font-size: 12px; margin-top: 10px; }
-
-    /* SENDER (Phone) 用スタイル */
     #reader-cam { width: 300px; height: 300px; background: #000; border: 2px solid var(--neon-green); margin-bottom: 20px; }
     
-    /* リモコンエリア */
-    #controller-ui {
-        width: 100%; height: 100%; display: flex; flex-direction: column;
-    }
-    .ctrl-area { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; color: rgba(255,255,255,0.2); border-bottom: 1px solid #333; }
-    .ctrl-area:active { background: rgba(255,255,255,0.1); color: #fff; }
-    #ctrl-file-label {
-        padding: 20px; background: var(--panel-bg); text-align: center; border-bottom: 1px solid #333;
-    }
+    /* コントローラーUI */
+    #controller-ui { width: 100%; height: 100%; display: flex; flex-direction: column; }
+    #ctrl-header { padding: 15px; background: #111; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+    
+    /* プレビューエリア（スマホ側に小さく表示） */
+    #preview-container { flex: 1; display: flex; justify-content: center; align-items: center; background: #111; overflow: hidden; position: relative;}
+    #preview-canvas { max-width: 90%; max-height: 90%; opacity: 0.5; } 
+    #preview-overlay { position: absolute; font-size: 40px; color: rgba(255,255,255,0.2); font-weight: bold; pointer-events: none; }
+
+    /* 操作ボタン */
+    #ctrl-footer { height: 120px; display: flex; border-top: 1px solid #333; }
+    .nav-btn { flex: 1; background: #1a1a1a; color: #fff; border: none; font-size: 24px; font-weight: bold; cursor: pointer; }
+    .nav-btn:active { background: #333; }
+    #btn-prev { border-right: 1px solid #333; color: var(--neon-pink); }
+    #btn-next { color: var(--neon-blue); flex: 2; } /* 次へボタンを大きく */
+    
     input[type="file"] { display: none; }
-
-    /* 転送バー */
-    #progress-wrap { width: 80%; height: 4px; background: #333; margin-top: 20px; border-radius: 2px; display: none; }
-    #progress-bar { width: 0%; height: 100%; background: var(--neon-green); transition: width 0.1s; }
-
 </style>
 </head>
 <body>
 
 <div id="screen-mode" class="screen active">
-    <h1>M5 P2P LINK</h1>
-    <button class="btn btn-blue" onclick="startReceiver()">📺 RECEIVER<br><span style="font-size:12px">(Tablet / PC)</span></button>
-    <button class="btn" onclick="startSender()">📱 SENDER<br><span style="font-size:12px">(Smartphone)</span></button>
-    <div style="margin-top:20px; color:#666; font-size:12px;">Same Wi-Fi Recommended</div>
+    <h1>M5 INSTANT</h1>
+    <button class="btn btn-blue" onclick="startReceiver()">📺 MONITOR<br><span style="font-size:12px">(Tablet)</span></button>
+    <button class="btn" onclick="startSender()">📱 REMOTE<br><span style="font-size:12px">(Phone)</span></button>
 </div>
 
 <div id="screen-receiver" class="screen">
     <div id="wait-ui" style="display:flex; flex-direction:column; align-items:center;">
-        <h2 style="color:var(--neon-blue)">WAITING FOR CONNECTION...</h2>
+        <h2 style="color:var(--neon-blue)">WAITING...</h2>
         <div id="qrcode"></div>
-        <div id="my-id-text" style="color:#aaa; font-family:monospace; margin-top:10px;">ID: ...</div>
-        <div class="status-log" id="recv-status">Scan this QR with Sender</div>
-        <div id="progress-wrap"><div id="progress-bar"></div></div>
+        <div class="status-log" id="recv-status">Scan QR with Remote</div>
     </div>
-    
-    <canvas id="pdf-canvas" style="display:none;"></canvas>
+    <img id="monitor-img" style="display:none;">
 </div>
 
 <div id="screen-sender" class="screen">
     <div id="scan-ui" style="display:flex; flex-direction:column; align-items:center;">
-        <h2 style="color:var(--neon-pink)">SCAN QR CODE</h2>
+        <h2 style="color:var(--neon-pink)">SCAN QR</h2>
         <div id="reader-cam"></div>
         <div class="status-log" id="send-status">Camera initializing...</div>
     </div>
 
     <div id="controller-ui" style="display:none;">
-        <label id="ctrl-file-label" class="btn btn-blue">
-            📂 SELECT PDF
-            <input type="file" id="file-input" accept="application/pdf">
-        </label>
-        <div id="send-progress-wrap" style="width:100%; height:4px; background:#333; display:none;">
-            <div id="send-progress-bar" style="width:0%; height:100%; background:var(--neon-green);"></div>
+        <div id="ctrl-header">
+            <label class="btn-blue" style="padding: 5px 15px; border-radius: 5px; font-size: 12px; cursor: pointer;">
+                📂 OPEN PDF
+                <input type="file" id="file-input" accept="application/pdf">
+            </label>
+            <div id="page-info" style="font-family: monospace; font-size: 14px;">- / -</div>
         </div>
         
-        <div class="ctrl-area" style="background:rgba(0,255,153,0.05);" onclick="sendCmd('PREV')">PREV PAGE</div>
-        <div class="ctrl-area" style="background:rgba(0,210,255,0.05); flex:2;" onclick="sendCmd('NEXT')">NEXT PAGE (TAP)</div>
+        <div id="preview-container" onclick="onNextPage()"> <canvas id="preview-canvas"></canvas>
+            <div id="preview-overlay">TAP TO NEXT</div>
+        </div>
+
+        <div id="ctrl-footer">
+            <button id="btn-prev" class="nav-btn" onclick="event.stopPropagation(); onPrevPage()">PREV</button>
+            <button id="btn-next" class="nav-btn" onclick="event.stopPropagation(); onNextPage()">NEXT</button>
+        </div>
     </div>
 </div>
 
 <script>
-    // === システム変数 ===
     let peer = null;
     let conn = null;
     let pdfDoc = null;
@@ -116,232 +114,116 @@
     let pdfRendering = false;
     let pageNumPending = null;
 
-    // === 初期化 ===
-    // PDF.js worker設定
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    // --- RECEIVER (タブレット側) ロジック ---
+    // === RECEIVER (Monitor) ===
     function startReceiver() {
         switchScreen('screen-receiver');
-        
-        // Peer作成
-        peer = new Peer({ debug: 2 }); // PeerJSクラウドサーバーを利用(無料・登録不要)
-
+        peer = new Peer();
         peer.on('open', (id) => {
-            document.getElementById('my-id-text').innerText = "ID: " + id;
-            // QRコード生成
-            new QRCode(document.getElementById("qrcode"), {
-                text: id,
-                width: 180,
-                height: 180
-            });
-            updateStatus("recv-status", "Ready. Scan QR.");
+            new QRCode(document.getElementById("qrcode"), { text: id, width: 180, height: 180 });
+            updateStatus("recv-status", "Ready.");
         });
-
         peer.on('connection', (c) => {
             conn = c;
-            setupReceiverConnection();
+            setupReceiver();
         });
-        
-        peer.on('error', err => alert("Peer Error: " + err));
     }
 
-    function setupReceiverConnection() {
+    function setupReceiver() {
         conn.on('open', () => {
-            updateStatus("recv-status", "✅ CONNECTED!");
-            document.getElementById('qrcode').style.display = 'none'; // 接続したらQR消す
-            document.getElementById('my-id-text').style.display = 'none';
+            updateStatus("recv-status", "Connected!");
+            document.getElementById('wait-ui').style.display = 'none';
+            document.getElementById('monitor-img').style.display = 'block';
         });
-
-        let receivedBuffer = [];
-        let receivedSize = 0;
-        let totalSize = 0;
-
         conn.on('data', (data) => {
-            // データタイプ判定
-            if (data.type === 'META') {
-                // ファイル転送開始
-                totalSize = data.size;
-                receivedBuffer = [];
-                receivedSize = 0;
-                document.getElementById('progress-wrap').style.display = 'block';
-                updateStatus("recv-status", `Receiving: ${data.name}...`);
-            
-            } else if (data.type === 'CHUNK') {
-                // データ受信中
-                receivedBuffer.push(data.payload);
-                receivedSize += data.payload.byteLength;
-                
-                const percent = (receivedSize / totalSize) * 100;
-                document.getElementById('progress-bar').style.width = percent + "%";
-
-                if (receivedSize >= totalSize) {
-                    // 受信完了 -> PDF結合
-                    const blob = new Blob(receivedBuffer, { type: 'application/pdf' });
-                    loadPdf(blob);
-                    document.getElementById('wait-ui').style.display = 'none';
-                    document.getElementById('pdf-canvas').style.display = 'block';
-                }
-            } else if (data.type === 'CMD') {
-                // リモコン操作
-                if (data.val === 'NEXT') onNextPage();
-                if (data.val === 'PREV') onPrevPage();
+            // 受信した画像データをそのまま表示
+            if (data.type === 'IMG') {
+                document.getElementById('monitor-img').src = data.payload;
             }
         });
     }
 
-    // --- SENDER (スマホ側) ロジック ---
+    // === SENDER (Remote) ===
     function startSender() {
         switchScreen('screen-sender');
-        startQRScanner();
-    }
-
-    function startQRScanner() {
         const html5QrCode = new Html5Qrcode("reader-cam");
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-        
-        html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-            // QR読込成功
+        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText) => {
             html5QrCode.stop();
             connectToReceiver(decodedText);
-        }).catch(err => {
-            updateStatus("send-status", "Camera Error: " + err);
         });
     }
 
     function connectToReceiver(targetId) {
-        updateStatus("send-status", "Connecting to " + targetId + "...");
+        updateStatus("send-status", "Connecting...");
         peer = new Peer();
-        
         peer.on('open', () => {
             conn = peer.connect(targetId);
             conn.on('open', () => {
-                // 接続成功 -> コントローラー表示
                 document.getElementById('scan-ui').style.display = 'none';
                 document.getElementById('controller-ui').style.display = 'flex';
             });
         });
     }
 
-    // ファイル送信ロジック (Chunking)
+    // === PDF Processing (スマホ側でレンダリング) ===
     document.getElementById('file-input').addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        if (!conn || !conn.open) { alert("Connection lost!"); return; }
-
-        // メタデータ送信
-        conn.send({ type: 'META', name: file.name, size: file.size });
-
-        const chunkSize = 16 * 1024; // 16KB per chunk (WebRTC safe size)
-        let offset = 0;
-        const reader = new FileReader();
         
-        document.getElementById('send-progress-wrap').style.display = 'block';
-        const pBar = document.getElementById('send-progress-bar');
-
-        reader.onload = (evt) => {
-            if (evt.target.error) return;
-            const buffer = evt.target.result;
-            
-            // チャンク送信
-            conn.send({ type: 'CHUNK', payload: buffer });
-            
-            offset += buffer.byteLength;
-            pBar.style.width = (offset / file.size * 100) + "%";
-
-            if (offset < file.size) {
-                readNextChunk();
-            } else {
-                // 完了
-                alert("Transfer Complete!");
-                pBar.style.background = "var(--neon-blue)";
-            }
-        };
-
-        const readNextChunk = () => {
-            const slice = file.slice(offset, offset + chunkSize);
-            reader.readAsArrayBuffer(slice);
-        };
-
-        readNextChunk();
-    });
-
-    function sendCmd(cmd) {
-        if (conn && conn.open) {
-            conn.send({ type: 'CMD', val: cmd });
-        }
-    }
-
-
-    // --- 共通: PDF描画ロジック ---
-    function loadPdf(blob) {
-        const url = URL.createObjectURL(blob);
+        const url = URL.createObjectURL(file);
         pdfjsLib.getDocument(url).promise.then((pdf) => {
             pdfDoc = pdf;
             pageNum = 1;
-            renderPage(pageNum);
+            renderAndSend(pageNum);
         });
-    }
+    });
 
-    function renderPage(num) {
+    function renderAndSend(num) {
+        if(pdfRendering) { pageNumPending = num; return; }
         pdfRendering = true;
+
         pdfDoc.getPage(num).then((page) => {
-            const canvas = document.getElementById('pdf-canvas');
+            // 1. スマホ上のCanvasに描画 (プレビュー用)
+            const canvas = document.getElementById('preview-canvas');
             const ctx = canvas.getContext('2d');
             
-            // 画面サイズに合わせてスケール調整
-            const viewportRaw = page.getViewport({scale: 1});
-            const scale = Math.min(window.innerWidth / viewportRaw.width, window.innerHeight / viewportRaw.height);
-            const viewport = page.getViewport({scale: scale});
+            // 画質設定: タブレットで見ても荒くならない程度の解像度でレンダリング
+            // scale 1.5 〜 2.0 くらいがバランス良し
+            const viewport = page.getViewport({scale: 1.5}); 
 
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
-            const renderContext = {
-                canvasContext: ctx,
-                viewport: viewport
-            };
-            const renderTask = page.render(renderContext);
+            const renderTask = page.render({ canvasContext: ctx, viewport: viewport });
 
             renderTask.promise.then(() => {
                 pdfRendering = false;
+                
+                // UI更新
+                document.getElementById('page-info').innerText = `${num} / ${pdfDoc.numPages}`;
+                
+                // 2. 画像データ(JPEG)に変換して送信
+                // JPEG quality 0.8 で容量削減
+                const imgData = canvas.toDataURL('image/jpeg', 0.8);
+                
+                if(conn && conn.open) {
+                    conn.send({ type: 'IMG', payload: imgData });
+                }
+
                 if (pageNumPending !== null) {
-                    renderPage(pageNumPending);
+                    renderAndSend(pageNumPending);
                     pageNumPending = null;
                 }
             });
         });
     }
 
-    function queueRenderPage(num) {
-        if (pdfRendering) {
-            pageNumPending = num;
-        } else {
-            renderPage(num);
-        }
-    }
+    function onPrevPage() { if (pageNum <= 1) return; pageNum--; renderAndSend(pageNum); }
+    function onNextPage() { if (!pdfDoc || pageNum >= pdfDoc.numPages) return; pageNum++; renderAndSend(pageNum); }
 
-    function onPrevPage() {
-        if (!pdfDoc || pageNum <= 1) return;
-        pageNum--;
-        queueRenderPage(pageNum);
-    }
-
-    function onNextPage() {
-        if (!pdfDoc || pageNum >= pdfDoc.numPages) return;
-        pageNum++;
-        queueRenderPage(pageNum);
-    }
-
-    // --- ユーティリティ ---
-    function switchScreen(id) {
-        document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
-    }
-    function updateStatus(id, msg) {
-        document.getElementById(id).innerText = msg;
-    }
-
+    function switchScreen(id) { document.querySelectorAll('.screen').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+    function updateStatus(id, msg) { document.getElementById(id).innerText = msg; }
 </script>
 </body>
 </html>
