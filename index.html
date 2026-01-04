@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Cyber P2P Streamer</title>
+<title>Auto P2P Streamer</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -37,7 +37,7 @@
     .btn-blue:active { background: var(--neon-blue); color: #000; }
 
     /* モニター用 */
-    #monitor-img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    #monitor-img { max-width: 100%; max-height: 100%; object-fit: contain; pointer-events: auto; }
     
     #qrcode { margin: 20px; padding: 10px; background: #fff; border-radius: 8px; }
     .status-log { font-family: monospace; color: #888; font-size: 12px; margin-top: 10px; }
@@ -48,8 +48,10 @@
     
     /* 上部バー */
     #ctrl-header { 
-        padding: 10px; background: #111; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; height: 60px;
+        padding: 5px 10px; background: #111; display: flex; flex-direction: column; border-bottom: 1px solid #333;
     }
+    .header-row { display: flex; justify-content: space-between; align-items: center; width: 100%; margin: 5px 0; }
+    
     .file-select-btn {
         background: #222; border: 1px solid #555; color: #eee; padding: 5px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;
     }
@@ -57,6 +59,10 @@
         background: #222; border: 1px solid var(--neon-green); color: var(--neon-green); padding: 5px 10px; border-radius: 4px; font-size: 10px; cursor: pointer;
     }
     .shake-active { background: var(--neon-green); color: #000; }
+    
+    /* スライダー */
+    .timer-ctrl { display: flex; align-items: center; gap: 10px; font-size: 10px; color: #aaa; width: 100%; }
+    input[type=range] { flex: 1; accent-color: var(--neon-blue); }
 
     /* プレビューエリア */
     #preview-container { 
@@ -65,12 +71,17 @@
     }
     #preview-canvas { max-width: 95%; max-height: 95%; opacity: 0.8; box-shadow: 0 0 15px rgba(0,210,255,0.2); }
     #preview-overlay { 
-        position: absolute; font-size: 20px; color: rgba(255,255,255,0.3); 
+        position: absolute; font-size: 14px; color: rgba(255,255,255,0.5); 
         font-weight: bold; pointer-events: none; text-align: center;
+        background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 10px;
+    }
+    /* 自動送り進捗バー */
+    #auto-progress {
+        position: absolute; bottom: 0; left: 0; height: 4px; width: 0%; background: var(--neon-blue); transition: width 0.1s linear;
     }
 
     /* 下部ボタン */
-    #ctrl-footer { height: 100px; display: flex; border-top: 1px solid #333; }
+    #ctrl-footer { height: 80px; display: flex; border-top: 1px solid #333; }
     .nav-btn { flex: 1; background: #1a1a1a; color: #fff; border: none; font-size: 18px; font-weight: bold; cursor: pointer; border-right: 1px solid #333; }
     .nav-btn:active { background: #333; }
     #btn-prev { flex: 1; color: #888; }
@@ -78,12 +89,14 @@
     #btn-next { flex: 2; color: var(--neon-blue); font-size: 24px; border-right: none; }
     
     input[type="file"] { display: none; }
+    
+    .overlay-guide { position: absolute; bottom: 20px; color: rgba(255,255,255,0.3); font-size: 12px; pointer-events: none; }
 </style>
 </head>
 <body>
 
 <div id="screen-mode" class="screen active">
-    <h1>CYBER STREAMER</h1>
+    <h1>AUTO STREAMER</h1>
     <button class="btn btn-blue" onclick="startReceiver()">📺 MONITOR<br><span style="font-size:12px">(Tablet)</span></button>
     <button class="btn" onclick="startSender()">📱 REMOTE<br><span style="font-size:12px">(Phone)</span></button>
 </div>
@@ -95,6 +108,7 @@
         <div class="status-log" id="recv-status">Scan QR with Remote</div>
     </div>
     <img id="monitor-img" style="display:none;">
+    <div class="overlay-guide" id="guide-msg">Double Tap to Fullscreen</div>
 </div>
 
 <div id="screen-sender" class="screen">
@@ -106,17 +120,26 @@
 
     <div id="controller-ui" style="display:none;">
         <div id="ctrl-header">
-            <label class="file-select-btn">
-                📂 ADD PDFS
-                <input type="file" id="file-input" accept="application/pdf" multiple>
-            </label>
-            <div id="file-info" style="font-size:10px; color:#aaa; max-width: 100px; overflow:hidden; white-space:nowrap;">No File</div>
-            <button id="btn-shake" class="shake-btn" onclick="enableShake()">📳 SHAKE: OFF</button>
+            <div class="header-row">
+                <label class="file-select-btn">
+                    📂 ADD PDFS
+                    <input type="file" id="file-input" accept="application/pdf" multiple>
+                </label>
+                <div id="file-info" style="font-size:10px; color:#aaa; max-width: 80px; overflow:hidden; white-space:nowrap;">No File</div>
+                <button id="btn-shake" class="shake-btn" onclick="enableShake()">📳 SHAKE: OFF</button>
+            </div>
+            <div class="header-row">
+                <div class="timer-ctrl">
+                    <span>AUTO: <span id="timer-val" style="color:var(--neon-blue)">10s</span></span>
+                    <input type="range" id="timer-slider" min="5" max="30" value="10" step="1">
+                </div>
+            </div>
         </div>
         
         <div id="preview-container" onclick="onNextPage()">
             <canvas id="preview-canvas"></canvas>
-            <div id="preview-overlay">TAP or SHAKE<br>TO NEXT</div>
+            <div id="preview-overlay">Tap / Shake / Auto</div>
+            <div id="auto-progress"></div>
         </div>
 
         <div id="ctrl-footer">
@@ -135,19 +158,36 @@
     let pdfRendering = false;
     let pageNumPending = null;
 
-    // プレイリスト管理
-    let playlist = []; // Fileオブジェクトの配列
+    // プレイリスト
+    let playlist = [];
     let currentFileIndex = -1;
 
-    // シェイク検知用
+    // シェイク
     let shakeEnabled = false;
     let lastShakeTime = 0;
+
+    // 自動送りタイマー
+    let autoInterval = 10000; // ms
+    let autoTimer = null;
+    let autoStartTime = 0;
+    let progressAnim = null;
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     // === RECEIVER ===
     function startReceiver() {
         switchScreen('screen-receiver');
+        
+        // ダブルタップでフルスクリーン
+        let lastTap = 0;
+        document.getElementById('screen-receiver').addEventListener('click', (e) => {
+            const now = Date.now();
+            if (now - lastTap < 300) {
+                toggleFullScreen();
+            }
+            lastTap = now;
+        });
+
         peer = new Peer();
         peer.on('open', (id) => {
             new QRCode(document.getElementById("qrcode"), { text: id, width: 180, height: 180 });
@@ -159,6 +199,7 @@
                 updateStatus("recv-status", "Connected!");
                 document.getElementById('wait-ui').style.display = 'none';
                 document.getElementById('monitor-img').style.display = 'block';
+                document.getElementById('guide-msg').style.display = 'none';
             });
             conn.on('data', (data) => {
                 if (data.type === 'IMG') {
@@ -168,6 +209,14 @@
         });
     }
 
+    function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(e=>{});
+        } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+        }
+    }
+
     // === SENDER ===
     function startSender() {
         switchScreen('screen-sender');
@@ -175,6 +224,15 @@
         html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText) => {
             html5QrCode.stop();
             connectToReceiver(decodedText);
+        });
+
+        // タイマースライダー設定
+        const slider = document.getElementById('timer-slider');
+        const label = document.getElementById('timer-val');
+        slider.addEventListener('input', (e) => {
+            autoInterval = e.target.value * 1000;
+            label.innerText = e.target.value + "s";
+            resetAutoTimer(); // 設定変えたらリセット
         });
     }
 
@@ -190,21 +248,14 @@
         });
     }
 
-    // === ファイル処理 & プレイリスト ===
+    // === ファイル処理 ===
     document.getElementById('file-input').addEventListener('change', (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
-        
-        // プレイリストに追加してシャッフル
         playlist = playlist.concat(files);
         shuffleArray(playlist);
-
-        // まだ再生してなければ開始
-        if (currentFileIndex === -1) {
-            loadNextPdf();
-        } else {
-            document.getElementById('file-info').innerText = `Queued: ${playlist.length} files`;
-        }
+        if (currentFileIndex === -1) loadNextPdf();
+        else document.getElementById('file-info').innerText = `Queued: ${playlist.length}`;
     });
 
     function shuffleArray(array) {
@@ -215,16 +266,9 @@
     }
 
     function loadNextPdf() {
-        if (playlist.length === 0) {
-            alert("No more PDFs in playlist!");
-            return;
-        }
-
-        // 次のファイルへ（ループさせるならここを調整）
+        if (playlist.length === 0) { alert("Playlist empty!"); return; }
         currentFileIndex = (currentFileIndex + 1) % playlist.length;
         const file = playlist[currentFileIndex];
-        
-        // UI更新
         document.getElementById('file-info').innerText = file.name;
 
         const url = URL.createObjectURL(file);
@@ -234,12 +278,11 @@
             renderAndSend(pageNum);
         }).catch(err => {
             console.error(err);
-            // 壊れたファイルなら次へ
             loadNextPdf();
         });
     }
 
-    // === レンダリング & 送信 ===
+    // === レンダリング & 送信 & タイマー管理 ===
     function renderAndSend(num) {
         if(pdfRendering) { pageNumPending = num; return; }
         pdfRendering = true;
@@ -247,8 +290,7 @@
         pdfDoc.getPage(num).then((page) => {
             const canvas = document.getElementById('preview-canvas');
             const ctx = canvas.getContext('2d');
-            const viewport = page.getViewport({scale: 1.0}); // スマホプレビュー用は軽量でOK
-
+            const viewport = page.getViewport({scale: 1.0});
             canvas.height = viewport.height;
             canvas.width = viewport.width;
 
@@ -256,18 +298,15 @@
 
             renderTask.promise.then(() => {
                 pdfRendering = false;
-                
-                // オーバーレイ表示更新
                 const info = `${num} / ${pdfDoc.numPages}`;
                 document.getElementById('preview-overlay').innerText = info;
 
-                // 送信用に高画質化（必要に応じてscale調整）
-                // toDataURL時に画質指定
                 const imgData = canvas.toDataURL('image/jpeg', 0.8);
-                
-                if(conn && conn.open) {
-                    conn.send({ type: 'IMG', payload: imgData });
-                }
+                if(conn && conn.open) conn.send({ type: 'IMG', payload: imgData });
+
+                // ★タイマーリセット★
+                // ページが表示された瞬間からカウント開始
+                resetAutoTimer();
 
                 if (pageNumPending !== null) {
                     renderAndSend(pageNumPending);
@@ -277,10 +316,36 @@
         });
     }
 
+    // === 自動送りロジック ===
+    function resetAutoTimer() {
+        if (autoTimer) clearTimeout(autoTimer);
+        if (progressAnim) cancelAnimationFrame(progressAnim);
+
+        autoStartTime = Date.now();
+        
+        // 次のページへ進むタイマーセット
+        autoTimer = setTimeout(() => {
+            onNextPage();
+        }, autoInterval);
+
+        // プログレスバーアニメーション
+        const bar = document.getElementById('auto-progress');
+        function updateBar() {
+            const elapsed = Date.now() - autoStartTime;
+            let pct = (elapsed / autoInterval) * 100;
+            if (pct > 100) pct = 100;
+            bar.style.width = pct + "%";
+            
+            if (pct < 100) {
+                progressAnim = requestAnimationFrame(updateBar);
+            }
+        }
+        updateBar();
+    }
+
     // === ナビゲーション ===
     function onPrevPage() {
-        if (!pdfDoc) return;
-        if (pageNum <= 1) return; 
+        if (!pdfDoc || pageNum <= 1) return;
         pageNum--;
         renderAndSend(pageNum);
     }
@@ -288,7 +353,6 @@
     function onNextPage() {
         if (!pdfDoc) return;
         if (pageNum >= pdfDoc.numPages) {
-            // 最終ページなら次のPDFへ
             loadNextPdf();
         } else {
             pageNum++;
@@ -296,21 +360,14 @@
         }
     }
 
-    // === シェイク機能 (加速度センサー) ===
+    // === シェイク (高感度設定) ===
     function enableShake() {
         if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-            // iOS 13+
-            DeviceMotionEvent.requestPermission()
-                .then(response => {
-                    if (response === 'granted') {
-                        startMotionListener();
-                    } else {
-                        alert("Permission denied");
-                    }
-                })
-                .catch(console.error);
+            DeviceMotionEvent.requestPermission().then(r => {
+                if (r === 'granted') startMotionListener();
+                else alert("Permission denied");
+            }).catch(console.error);
         } else {
-            // Android / Old iOS
             startMotionListener();
         }
     }
@@ -322,27 +379,23 @@
         btn.classList.add('shake-active');
 
         window.addEventListener('devicemotion', (event) => {
-            const acc = event.acceleration; // 重力を除く加速度
+            const acc = event.acceleration; 
             if (!acc) return;
 
-            // シェイク検知ロジック (簡易版: 合成ベクトルが閾値超え)
             const strength = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
             
-            // 閾値 15m/s^2 (強めに振る)
-            if (strength > 15) {
+            // ★感度調整: 15 -> 5 (かなり敏感)
+            if (strength > 5) {
                 const now = Date.now();
-                // 誤爆防止: 0.8秒以内の連続検知は無視
                 if (now - lastShakeTime > 800) {
                     lastShakeTime = now;
-                    // バイブレーション (Androidのみ対応)
                     if (navigator.vibrate) navigator.vibrate(50);
-                    onNextPage();
+                    onNextPage(); // これを呼べばタイマーもリセットされる
                 }
             }
         });
     }
 
-    // ユーティリティ
     function switchScreen(id) { document.querySelectorAll('.screen').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active'); }
     function updateStatus(id, msg) { document.getElementById(id).innerText = msg; }
 </script>
