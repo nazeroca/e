@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>M5 Instant Streamer</title>
+<title>Cyber P2P Streamer</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
@@ -36,7 +36,7 @@
     .btn-blue { border-color: var(--neon-blue); color: var(--neon-blue); box-shadow: 0 0 10px rgba(0,210,255,0.2); }
     .btn-blue:active { background: var(--neon-blue); color: #000; }
 
-    /* モニター用画像 */
+    /* モニター用 */
     #monitor-img { max-width: 100%; max-height: 100%; object-fit: contain; }
     
     #qrcode { margin: 20px; padding: 10px; background: #fff; border-radius: 8px; }
@@ -45,19 +45,37 @@
     
     /* コントローラーUI */
     #controller-ui { width: 100%; height: 100%; display: flex; flex-direction: column; }
-    #ctrl-header { padding: 15px; background: #111; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
     
-    /* プレビューエリア（スマホ側に小さく表示） */
-    #preview-container { flex: 1; display: flex; justify-content: center; align-items: center; background: #111; overflow: hidden; position: relative;}
-    #preview-canvas { max-width: 90%; max-height: 90%; opacity: 0.5; } 
-    #preview-overlay { position: absolute; font-size: 40px; color: rgba(255,255,255,0.2); font-weight: bold; pointer-events: none; }
+    /* 上部バー */
+    #ctrl-header { 
+        padding: 10px; background: #111; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; height: 60px;
+    }
+    .file-select-btn {
+        background: #222; border: 1px solid #555; color: #eee; padding: 5px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;
+    }
+    .shake-btn {
+        background: #222; border: 1px solid var(--neon-green); color: var(--neon-green); padding: 5px 10px; border-radius: 4px; font-size: 10px; cursor: pointer;
+    }
+    .shake-active { background: var(--neon-green); color: #000; }
 
-    /* 操作ボタン */
-    #ctrl-footer { height: 120px; display: flex; border-top: 1px solid #333; }
-    .nav-btn { flex: 1; background: #1a1a1a; color: #fff; border: none; font-size: 24px; font-weight: bold; cursor: pointer; }
+    /* プレビューエリア */
+    #preview-container { 
+        flex: 1; display: flex; justify-content: center; align-items: center; 
+        background: #000; overflow: hidden; position: relative;
+    }
+    #preview-canvas { max-width: 95%; max-height: 95%; opacity: 0.8; box-shadow: 0 0 15px rgba(0,210,255,0.2); }
+    #preview-overlay { 
+        position: absolute; font-size: 20px; color: rgba(255,255,255,0.3); 
+        font-weight: bold; pointer-events: none; text-align: center;
+    }
+
+    /* 下部ボタン */
+    #ctrl-footer { height: 100px; display: flex; border-top: 1px solid #333; }
+    .nav-btn { flex: 1; background: #1a1a1a; color: #fff; border: none; font-size: 18px; font-weight: bold; cursor: pointer; border-right: 1px solid #333; }
     .nav-btn:active { background: #333; }
-    #btn-prev { border-right: 1px solid #333; color: var(--neon-pink); }
-    #btn-next { color: var(--neon-blue); flex: 2; } /* 次へボタンを大きく */
+    #btn-prev { flex: 1; color: #888; }
+    #btn-skip { flex: 1; color: var(--neon-pink); font-size: 14px; }
+    #btn-next { flex: 2; color: var(--neon-blue); font-size: 24px; border-right: none; }
     
     input[type="file"] { display: none; }
 </style>
@@ -65,7 +83,7 @@
 <body>
 
 <div id="screen-mode" class="screen active">
-    <h1>M5 INSTANT</h1>
+    <h1>CYBER STREAMER</h1>
     <button class="btn btn-blue" onclick="startReceiver()">📺 MONITOR<br><span style="font-size:12px">(Tablet)</span></button>
     <button class="btn" onclick="startSender()">📱 REMOTE<br><span style="font-size:12px">(Phone)</span></button>
 </div>
@@ -88,19 +106,22 @@
 
     <div id="controller-ui" style="display:none;">
         <div id="ctrl-header">
-            <label class="btn-blue" style="padding: 5px 15px; border-radius: 5px; font-size: 12px; cursor: pointer;">
-                📂 OPEN PDF
-                <input type="file" id="file-input" accept="application/pdf">
+            <label class="file-select-btn">
+                📂 ADD PDFS
+                <input type="file" id="file-input" accept="application/pdf" multiple>
             </label>
-            <div id="page-info" style="font-family: monospace; font-size: 14px;">- / -</div>
+            <div id="file-info" style="font-size:10px; color:#aaa; max-width: 100px; overflow:hidden; white-space:nowrap;">No File</div>
+            <button id="btn-shake" class="shake-btn" onclick="enableShake()">📳 SHAKE: OFF</button>
         </div>
         
-        <div id="preview-container" onclick="onNextPage()"> <canvas id="preview-canvas"></canvas>
-            <div id="preview-overlay">TAP TO NEXT</div>
+        <div id="preview-container" onclick="onNextPage()">
+            <canvas id="preview-canvas"></canvas>
+            <div id="preview-overlay">TAP or SHAKE<br>TO NEXT</div>
         </div>
 
         <div id="ctrl-footer">
             <button id="btn-prev" class="nav-btn" onclick="event.stopPropagation(); onPrevPage()">PREV</button>
+            <button id="btn-skip" class="nav-btn" onclick="event.stopPropagation(); loadNextPdf()">SKIP<br>PDF</button>
             <button id="btn-next" class="nav-btn" onclick="event.stopPropagation(); onNextPage()">NEXT</button>
         </div>
     </div>
@@ -114,9 +135,17 @@
     let pdfRendering = false;
     let pageNumPending = null;
 
+    // プレイリスト管理
+    let playlist = []; // Fileオブジェクトの配列
+    let currentFileIndex = -1;
+
+    // シェイク検知用
+    let shakeEnabled = false;
+    let lastShakeTime = 0;
+
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    // === RECEIVER (Monitor) ===
+    // === RECEIVER ===
     function startReceiver() {
         switchScreen('screen-receiver');
         peer = new Peer();
@@ -126,25 +155,20 @@
         });
         peer.on('connection', (c) => {
             conn = c;
-            setupReceiver();
+            conn.on('open', () => {
+                updateStatus("recv-status", "Connected!");
+                document.getElementById('wait-ui').style.display = 'none';
+                document.getElementById('monitor-img').style.display = 'block';
+            });
+            conn.on('data', (data) => {
+                if (data.type === 'IMG') {
+                    document.getElementById('monitor-img').src = data.payload;
+                }
+            });
         });
     }
 
-    function setupReceiver() {
-        conn.on('open', () => {
-            updateStatus("recv-status", "Connected!");
-            document.getElementById('wait-ui').style.display = 'none';
-            document.getElementById('monitor-img').style.display = 'block';
-        });
-        conn.on('data', (data) => {
-            // 受信した画像データをそのまま表示
-            if (data.type === 'IMG') {
-                document.getElementById('monitor-img').src = data.payload;
-            }
-        });
-    }
-
-    // === SENDER (Remote) ===
+    // === SENDER ===
     function startSender() {
         switchScreen('screen-sender');
         const html5QrCode = new Html5Qrcode("reader-cam");
@@ -166,31 +190,64 @@
         });
     }
 
-    // === PDF Processing (スマホ側でレンダリング) ===
+    // === ファイル処理 & プレイリスト ===
     document.getElementById('file-input').addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
         
+        // プレイリストに追加してシャッフル
+        playlist = playlist.concat(files);
+        shuffleArray(playlist);
+
+        // まだ再生してなければ開始
+        if (currentFileIndex === -1) {
+            loadNextPdf();
+        } else {
+            document.getElementById('file-info').innerText = `Queued: ${playlist.length} files`;
+        }
+    });
+
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+
+    function loadNextPdf() {
+        if (playlist.length === 0) {
+            alert("No more PDFs in playlist!");
+            return;
+        }
+
+        // 次のファイルへ（ループさせるならここを調整）
+        currentFileIndex = (currentFileIndex + 1) % playlist.length;
+        const file = playlist[currentFileIndex];
+        
+        // UI更新
+        document.getElementById('file-info').innerText = file.name;
+
         const url = URL.createObjectURL(file);
         pdfjsLib.getDocument(url).promise.then((pdf) => {
             pdfDoc = pdf;
             pageNum = 1;
             renderAndSend(pageNum);
+        }).catch(err => {
+            console.error(err);
+            // 壊れたファイルなら次へ
+            loadNextPdf();
         });
-    });
+    }
 
+    // === レンダリング & 送信 ===
     function renderAndSend(num) {
         if(pdfRendering) { pageNumPending = num; return; }
         pdfRendering = true;
 
         pdfDoc.getPage(num).then((page) => {
-            // 1. スマホ上のCanvasに描画 (プレビュー用)
             const canvas = document.getElementById('preview-canvas');
             const ctx = canvas.getContext('2d');
-            
-            // 画質設定: タブレットで見ても荒くならない程度の解像度でレンダリング
-            // scale 1.5 〜 2.0 くらいがバランス良し
-            const viewport = page.getViewport({scale: 1.5}); 
+            const viewport = page.getViewport({scale: 1.0}); // スマホプレビュー用は軽量でOK
 
             canvas.height = viewport.height;
             canvas.width = viewport.width;
@@ -200,11 +257,12 @@
             renderTask.promise.then(() => {
                 pdfRendering = false;
                 
-                // UI更新
-                document.getElementById('page-info').innerText = `${num} / ${pdfDoc.numPages}`;
-                
-                // 2. 画像データ(JPEG)に変換して送信
-                // JPEG quality 0.8 で容量削減
+                // オーバーレイ表示更新
+                const info = `${num} / ${pdfDoc.numPages}`;
+                document.getElementById('preview-overlay').innerText = info;
+
+                // 送信用に高画質化（必要に応じてscale調整）
+                // toDataURL時に画質指定
                 const imgData = canvas.toDataURL('image/jpeg', 0.8);
                 
                 if(conn && conn.open) {
@@ -219,9 +277,72 @@
         });
     }
 
-    function onPrevPage() { if (pageNum <= 1) return; pageNum--; renderAndSend(pageNum); }
-    function onNextPage() { if (!pdfDoc || pageNum >= pdfDoc.numPages) return; pageNum++; renderAndSend(pageNum); }
+    // === ナビゲーション ===
+    function onPrevPage() {
+        if (!pdfDoc) return;
+        if (pageNum <= 1) return; 
+        pageNum--;
+        renderAndSend(pageNum);
+    }
 
+    function onNextPage() {
+        if (!pdfDoc) return;
+        if (pageNum >= pdfDoc.numPages) {
+            // 最終ページなら次のPDFへ
+            loadNextPdf();
+        } else {
+            pageNum++;
+            renderAndSend(pageNum);
+        }
+    }
+
+    // === シェイク機能 (加速度センサー) ===
+    function enableShake() {
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            // iOS 13+
+            DeviceMotionEvent.requestPermission()
+                .then(response => {
+                    if (response === 'granted') {
+                        startMotionListener();
+                    } else {
+                        alert("Permission denied");
+                    }
+                })
+                .catch(console.error);
+        } else {
+            // Android / Old iOS
+            startMotionListener();
+        }
+    }
+
+    function startMotionListener() {
+        shakeEnabled = true;
+        const btn = document.getElementById('btn-shake');
+        btn.innerText = "📳 SHAKE: ON";
+        btn.classList.add('shake-active');
+
+        window.addEventListener('devicemotion', (event) => {
+            const acc = event.acceleration; // 重力を除く加速度
+            if (!acc) return;
+
+            // シェイク検知ロジック (簡易版: 合成ベクトルが閾値超え)
+            const strength = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+            
+            // 閾値 15m/s^2 (強めに振る)
+            if (strength > 15) {
+                const now = Date.now();
+                // 誤爆防止: 0.8秒以内の連続検知は無視
+                if (now - lastShakeTime > 800) {
+                    lastShakeTime = now;
+                    // バイブレーション (Androidのみ対応)
+                    if (navigator.vibrate) navigator.vibrate(50);
+                    onNextPage();
+                }
+            }
+        });
+    }
+
+    // ユーティリティ
     function switchScreen(id) { document.querySelectorAll('.screen').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active'); }
     function updateStatus(id, msg) { document.getElementById(id).innerText = msg; }
 </script>
